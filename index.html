@@ -116,19 +116,8 @@
     </div>
     
     <div id="login-form">
-      <div class="form-group">
-        <label for="email">이메일</label>
-        <input type="email" id="email" placeholder="이메일 주소를 입력하세요">
-      </div>
-      
-      <div class="form-group">
-        <label for="password">비밀번호</label>
-        <input type="password" id="password" placeholder="비밀번호를 입력하세요">
-      </div>
-      
-      <button id="login-button">로그인</button>
-      <button id="signup-button" style="background-color: #fbbc05; margin-top: 0.5rem;">회원가입</button>
-      
+      <p style="text-align: center; margin-bottom: 1.5rem;">익명으로 로그인하여 시작하세요</p>
+      <button id="anonymous-login-button">익명 로그인</button>
       <div id="error-message" class="error hidden"></div>
       <div id="success-message" class="success hidden"></div>
     </div>
@@ -138,6 +127,7 @@
       <p>아래 토큰을 Unity WebGL 앱에서 사용하세요:</p>
       <div id="token-display"></div>
       <button id="copy-token">토큰 복사</button>
+      <button id="open-host" style="background-color: #fbbc05; margin-top: 0.5rem;">퀴즈 호스트 시작</button>
       <button id="logout-button" style="background-color: #ea4335; margin-top: 0.5rem;">로그아웃</button>
     </div>
   </div>
@@ -148,8 +138,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
     import { 
       getAuth, 
-      signInWithEmailAndPassword,
-      createUserWithEmailAndPassword,
+      signInAnonymously,
       onAuthStateChanged,
       signOut
     } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js";
@@ -175,12 +164,10 @@
     // 요소 참조
     const loginForm = document.getElementById('login-form');
     const tokenSection = document.getElementById('token-section');
-    const emailInput = document.getElementById('email');
-    const passwordInput = document.getElementById('password');
-    const loginButton = document.getElementById('login-button');
-    const signupButton = document.getElementById('signup-button');
+    const anonymousLoginButton = document.getElementById('anonymous-login-button');
     const logoutButton = document.getElementById('logout-button');
     const copyTokenButton = document.getElementById('copy-token');
+    const openHostButton = document.getElementById('open-host');
     const errorMessage = document.getElementById('error-message');
     const successMessage = document.getElementById('success-message');
     const tokenDisplay = document.getElementById('token-display');
@@ -196,7 +183,7 @@
         tokenSection.classList.remove('hidden');
         statusIndicator.classList.remove('offline');
         statusIndicator.classList.add('online');
-        statusText.textContent = `${user.email}로 로그인됨`;
+        statusText.textContent = '익명으로 로그인됨';
         
         // 사용자 토큰 가져오기
         getCustomToken(user);
@@ -207,42 +194,26 @@
         statusIndicator.classList.remove('online');
         statusIndicator.classList.add('offline');
         statusText.textContent = '로그인되지 않음';
-        
-        // 입력 필드 초기화
-        emailInput.value = '';
-        passwordInput.value = '';
       }
     });
     
-    // 로그인 처리 함수
-    loginButton.addEventListener('click', async () => {
-      const email = emailInput.value;
-      const password = passwordInput.value;
-      
-      if (!email || !password) {
-        showError('이메일과 비밀번호를 모두 입력해주세요.');
-        return;
-      }
-      
+    // 익명 로그인 처리 함수
+    anonymousLoginButton.addEventListener('click', async () => {
       try {
         hideError();
-        loginButton.disabled = true;
-        loginButton.textContent = '로그인 중...';
+        anonymousLoginButton.disabled = true;
+        anonymousLoginButton.textContent = '로그인 중...';
         
-        // Firebase 이메일/비밀번호 로그인
-        await signInWithEmailAndPassword(auth, email, password);
-        showSuccess('로그인 성공!');
+        // Firebase 익명 로그인
+        await signInAnonymously(auth);
+        showSuccess('익명 로그인 성공!');
       } catch (error) {
         console.error('로그인 오류:', error);
         let errorMsg = '로그인 중 오류가 발생했습니다.';
         
         switch(error.code) {
-          case 'auth/invalid-email':
-            errorMsg = '유효하지 않은 이메일 형식입니다.';
-            break;
-          case 'auth/user-not-found':
-          case 'auth/wrong-password':
-            errorMsg = '이메일 또는 비밀번호가 일치하지 않습니다.';
+          case 'auth/operation-not-allowed':
+            errorMsg = '익명 로그인이 활성화되어 있지 않습니다.';
             break;
           case 'auth/too-many-requests':
             errorMsg = '너무 많은 로그인 시도. 잠시 후 다시 시도해주세요.';
@@ -251,54 +222,8 @@
         
         showError(errorMsg);
       } finally {
-        loginButton.disabled = false;
-        loginButton.textContent = '로그인';
-      }
-    });
-    
-    // 회원가입 처리 함수
-    signupButton.addEventListener('click', async () => {
-      const email = emailInput.value;
-      const password = passwordInput.value;
-      
-      if (!email || !password) {
-        showError('이메일과 비밀번호를 모두 입력해주세요.');
-        return;
-      }
-      
-      if (password.length < 6) {
-        showError('비밀번호는 최소 6자리 이상이어야 합니다.');
-        return;
-      }
-      
-      try {
-        hideError();
-        signupButton.disabled = true;
-        signupButton.textContent = '가입 중...';
-        
-        // Firebase 이메일/비밀번호 회원가입
-        await createUserWithEmailAndPassword(auth, email, password);
-        showSuccess('회원가입 성공! 자동으로 로그인되었습니다.');
-      } catch (error) {
-        console.error('회원가입 오류:', error);
-        let errorMsg = '회원가입 중 오류가 발생했습니다.';
-        
-        switch(error.code) {
-          case 'auth/email-already-in-use':
-            errorMsg = '이미 사용 중인 이메일입니다.';
-            break;
-          case 'auth/invalid-email':
-            errorMsg = '유효하지 않은 이메일 형식입니다.';
-            break;
-          case 'auth/weak-password':
-            errorMsg = '비밀번호가 너무 약합니다.';
-            break;
-        }
-        
-        showError(errorMsg);
-      } finally {
-        signupButton.disabled = false;
-        signupButton.textContent = '회원가입';
+        anonymousLoginButton.disabled = false;
+        anonymousLoginButton.textContent = '익명 로그인';
       }
     });
     
@@ -311,6 +236,11 @@
         console.error('로그아웃 오류:', error);
         showError('로그아웃 중 오류가 발생했습니다.');
       }
+    });
+    
+    // 퀴즈 호스트 페이지로 이동
+    openHostButton.addEventListener('click', () => {
+      window.location.href = 'https://jungame3757.github.io/WhatQuizHost/';
     });
     
     // 토큰 복사 기능
@@ -373,6 +303,11 @@
                 // 토큰 만료 시간 설정 (1시간)
                 const expiryTime = new Date().getTime() + (60 * 60 * 1000);
                 localStorage.setItem('whatquiz_token_expiry', expiryTime);
+                
+                // 토큰 발급 성공 시 자동으로 호스트 페이지로 이동 설정
+                setTimeout(() => {
+                  window.location.href = 'https://jungame3757.github.io/WhatQuizHost/';
+                }, 1500);
             } else {
                 throw new Error(`토큰을 받지 못했습니다: ${JSON.stringify(data)}`);
             }
